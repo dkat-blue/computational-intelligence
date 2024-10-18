@@ -176,4 +176,66 @@ if __name__ == "__main__":
         results_dir=results_dir
     )
 
+    import numpy as np
+from sklearn.metrics import mean_squared_error, r2_score
+import logging
+import os
+from src.visualization import plot_predictions
+from src.utils import log_experiment_params
+
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+def evaluate_model_ga(model, test_data, scaler_y, results_dir=None):
+    """
+    Evaluate the GA-optimized model on test data.
+
+    Args:
+        model (tf.keras.Model): The GA-optimized model to evaluate.
+        test_data (tuple): Test data as (X, y).
+        scaler_y (sklearn.preprocessing.StandardScaler): Scaler used for the target variable.
+        results_dir (str): Directory to save results. If None, results won't be saved.
+
+    Returns:
+        dict: Dictionary containing evaluation metrics.
+    """
+    logger.info("Evaluating GA-optimized model on test data")
+    
+    test_X, test_y = test_data
+    test_predictions_scaled = model.predict(test_X)
+    
+    # Inverse transform the predictions and actual values
+    test_predictions = scaler_y.inverse_transform(test_predictions_scaled)
+    test_actual = scaler_y.inverse_transform(test_y)
+    
+    # Calculate metrics
+    mse = mean_squared_error(test_actual, test_predictions)
+    rmse = np.sqrt(mse)
+    r2 = r2_score(test_actual, test_predictions)
+    
+    logger.info(f"Test MSE: {mse:.4f}")
+    logger.info(f"Test RMSE: {rmse:.4f}")
+    logger.info(f"Test R2 Score: {r2:.4f}")
+    
+    if results_dir:
+        # Plot predictions
+        plot_predictions(test_actual, test_predictions, "GA Model Predictions", 
+                         save_path=os.path.join(results_dir, "ga_predictions.png"))
+        
+        # Log evaluation metrics
+        log_experiment_params({
+            "test_mse": mse,
+            "test_rmse": rmse,
+            "test_r2": r2
+        }, os.path.join(results_dir, "ga_evaluation_metrics.txt"))
+    
+    return {
+        "mse": mse,
+        "rmse": rmse,
+        "r2": r2,
+        "predictions": test_predictions,
+        "actual": test_actual
+    }
+
     print("Genetic Algorithm optimization complete. Check the 'example_results_ga' directory for outputs.")

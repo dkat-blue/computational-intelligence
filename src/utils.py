@@ -61,6 +61,43 @@ def log_experiment_params(params, file_path):
             f.write(f"{key}: {value}\n")
     logger.info(f"Experiment parameters logged to {file_path}")
 
+def load_results(results_dir):
+    """
+    Load results from a specified directory.
+    
+    Args:
+        results_dir (str): Path to the directory containing the results.
+    
+    Returns:
+        dict: A dictionary containing the loaded results.
+    """
+    results = {}
+    
+    # Load text files
+    for file in os.listdir(results_dir):
+        if file.endswith('.txt'):
+            with open(os.path.join(results_dir, file), 'r') as f:
+                key = os.path.splitext(file)[0]
+                content = f.read()
+                if 'metrics' in file:
+                    # Parse metrics into a dictionary
+                    metrics = {}
+                    for line in content.split('\n'):
+                        if ':' in line:
+                            k, v = line.split(':')
+                            metrics[k.strip()] = float(v.strip())
+                    results[key] = metrics
+                else:
+                    results[key] = content
+    
+    # Load PNG files (we'll just store the file paths)
+    for file in os.listdir(results_dir):
+        if file.endswith('.png'):
+            key = os.path.splitext(file)[0]
+            results[key] = os.path.join(results_dir, file)
+    
+    return results
+
 if __name__ == "__main__":
     # Example usage
     set_seeds()
