@@ -1,126 +1,154 @@
-# src/models.py
-
+import os
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, Dropout, InputLayer, Flatten
-from tensorflow.keras.optimizers import SGD
+from tensorflow.keras.layers import Dense, InputLayer, Flatten
 import logging
+
+from src.utils import log_experiment_params
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-def create_model(input_shape, layer_sizes=[256, 128, 64], dropout_rate=0.2, l2_reg=0.0001):
+class ModelWrapper:
     """
-    Create a neural network model with the specified architecture.
-
-    Args:
-        input_shape (tuple): Shape of the input data (window_size, num_features).
-        layer_sizes (list): List of integers representing the number of units in each hidden layer.
-        dropout_rate (float): Dropout rate to apply after each hidden layer.
-        l2_reg (float): L2 regularization factor.
-
-    Returns:
-        tf.keras.Model: The created model.
+    A class to encapsulate the neural network model.
     """
-    model = Sequential()
-    model.add(InputLayer(input_shape=input_shape))
-    model.add(Flatten())
 
-    for units in layer_sizes:
-        model.add(Dense(units, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(l2_reg)))
-        model.add(Dropout(dropout_rate))
+    def __init__(self, input_shape, layer_sizes):
+        """
+        Initialize the model.
 
-    model.add(Dense(1))  # Output layer
+        Args:
+            input_shape (tuple): Shape of the input data (excluding batch size).
+            layer_sizes (list): List of integers representing the number of units in each hidden layer.
+        """
+        self.input_shape = input_shape
+        self.layer_sizes = layer_sizes
+        self.model = self._build_model()
+        self.optimizer = None
+        self.hyperparameters = {
+            "input_shape": self.input_shape,
+            "layer_sizes": self.layer_sizes
+        }
 
-    logger.info(f"Created model with architecture: {layer_sizes}")
-    return model
+    def _build_model(self):
+        """
+        Build the Sequential model based on the input shape and layer sizes.
 
-def compile_model_sgd(model, learning_rate=0.001, momentum=0.9):
-    """
-    Compile the model with SGD optimizer.
+        Returns:
+            tf.keras.Model: The constructed Sequential model.
+        """
+        model = Sequential()
+        model.add(InputLayer(input_shape=self.input_shape))
+        model.add(Flatten())
 
-    Args:
-        model (tf.keras.Model): The model to compile.
-        learning_rate (float): Learning rate for the SGD optimizer.
-        momentum (float): Momentum for the SGD optimizer.
+        for units in self.layer_sizes:
+            model.add(Dense(units=units, activation='relu'))
 
-    Returns:
-        tf.keras.Model: The compiled model.
-    """
-    optimizer = SGD(learning_rate=learning_rate, momentum=momentum)
-    model.compile(optimizer=optimizer, loss='mean_squared_error')
-    logger.info(f"Compiled model with SGD optimizer (lr={learning_rate}, momentum={momentum})")
-    return model
+        model.add(Dense(1))  # Output layer
+        return model
 
-def create_and_compile_sgd_model(input_shape, layer_sizes=[256, 128, 64], dropout_rate=0.2, l2_reg=0.0001,
-                                 learning_rate=0.001, momentum=0.9):
-    """
-    Create and compile a model for SGD training.
+    def compile(self, optimizer, loss='mse'):
+        """
+        Compile the model with the given optimizer and loss function.
 
-    Args:
-        input_shape (tuple): Shape of the input data (window_size, num_features).
-        layer_sizes (list): List of integers representing the number of units in each hidden layer.
-        dropout_rate (float): Dropout rate to apply after each hidden layer.
-        l2_reg (float): L2 regularization factor.
-        learning_rate (float): Learning rate for the SGD optimizer.
-        momentum (float): Momentum for the SGD optimizer.
+        Args:
+            optimizer: An instance of a Keras optimizer.
+            loss (str): Loss function to use.
+        """
+        self.model.compile(optimizer=optimizer, loss=loss)
+        logger.info("Model compiled with optimizer: %s and loss: %s", optimizer, loss)
 
-    Returns:
-        tf.keras.Model: The created and compiled model.
-    """
-    model = create_model(input_shape, layer_sizes, dropout_rate, l2_reg)
-    return compile_model_sgd(model, learning_rate, momentum)
+    def set_optimizer(self, optimizer):
+        """
+        Set the optimizer for the model.
 
-def create_ga_model(input_shape, layer_sizes=[256, 128, 64]):
-    """
-    Create a model for use with the Genetic Algorithm.
+        Args:
+            optimizer (Optimizer): An instance of an optimizer class.
+        """
+        self.optimizer = optimizer
+        logger.info("Optimizer set to: %s", type(optimizer).__name__)
 
-    Args:
-        input_shape (tuple): Shape of the input data (window_size, num_features).
+    def train(self, train_generator, val_generator, results_dir=None, **kwargs):
+        """
+        Train the model using the optimizer's optimize method.
 
-    Returns:
-        tf.keras.Model: The created model (uncompiled).
-    """
-    model = Sequential()
-    model.add(InputLayer(input_shape=input_shape))
-    model.add(Flatten())
+        Args:
+            train_generator: Training data generator.
+            val_generator: Validation data generator.
+            results_dir (str): Directory to save results.
+            **kwargs: Additional arguments for the optimizer's optimize method.
+        """
+        if self.optimizer is None:
+            raise ValueError("Optimizer not set. Use set_optimizer() to assign an optimizer.")
 
-    for units in layer_sizes:
-        model.add(Dense(units, activation='relu'))
+        # Optimize the model
+        self.optimizer.optimize(self.model, train_generator, val_generator, results_dir=results_dir, **kwargs)
 
-    model.add(Dense(1))  # Output layer
+        # Save model and optimizer hyperparameters
+        if results_dir:
+            # Save model hyperparameters
+            model_hyperparams = self.get_hyperparameters()
+            model_hyperparams_path = os.path.join(results_dir, 'model_hyperparameters.txt')
+            log_experiment_params(model_hyperparams, model_hyperparams_path)
+            logger.info(f"Model hyperparameters saved to: {model_hyperparams_path}")
 
-    logger.info(f"Created GA model with architecture: {layer_sizes}")
-    return model
+            # Save optimizer hyperparameters
+            optimizer_hyperparams = self.optimizer.get_hyperparameters()
+            optimizer_hyperparams_path = os.path.join(results_dir, 'optimizer_hyperparameters.txt')
+            log_experiment_params(optimizer_hyperparams, optimizer_hyperparams_path)
+            logger.info(f"Optimizer hyperparameters saved to: {optimizer_hyperparams_path}")
 
-def get_total_params(model):
-    """
-    Get the total number of parameters in the model.
+    def evaluate(self, test_generator):
+        """
+        Evaluate the model on the test data.
 
-    Args:
-        model (tf.keras.Model): The model to analyze.
+        Args:
+            test_generator: Test data generator.
 
-    Returns:
-        int: Total number of parameters in the model.
-    """
-    return sum(tf.keras.backend.count_params(w) for w in model.trainable_weights)
+        Returns:
+            float: Test loss.
+        """
+        loss = self.model.evaluate(test_generator, verbose=0)
+        logger.info("Test loss: %.4f", loss)
+        return loss
 
-if __name__ == "__main__":
-    # Example usage and testing
-    input_shape = (12, 8)  # Assuming window_size=12 and 8 input features
-    layer_sizes = [128, 64, 32]
+    def predict(self, X):
+        """
+        Generate predictions for the input samples.
 
-    # Create and compile SGD model
-    sgd_model = create_and_compile_sgd_model(input_shape, layer_sizes)
-    sgd_model.summary()
-    logger.info(f"SGD Model total parameters: {get_total_params(sgd_model)}")
+        Args:
+            X: Input data.
 
-    # Create GA model
-    ga_model = create_ga_model(input_shape, layer_sizes)
-    ga_model.summary()
-    logger.info(f"GA Model total parameters: {get_total_params(ga_model)}")
+        Returns:
+            np.array: Predictions.
+        """
+        return self.model.predict(X)
 
-    # Verify that both models have the same number of parameters
-    assert get_total_params(sgd_model) == get_total_params(ga_model), "Models have different number of parameters"
-    logger.info("Both models have the same number of parameters")
+    def get_hyperparameters(self):
+        """
+        Get the model's hyperparameters.
+
+        Returns:
+            dict: Dictionary of model hyperparameters.
+        """
+        return self.hyperparameters
+
+    def get_weights(self):
+        """
+        Get the model's weights.
+
+        Returns:
+            List of arrays: The model's weights.
+        """
+        return self.model.get_weights()
+
+    def set_weights(self, weights):
+        """
+        Set the model's weights.
+
+        Args:
+            weights: List of arrays representing the model's weights.
+        """
+        self.model.set_weights(weights)

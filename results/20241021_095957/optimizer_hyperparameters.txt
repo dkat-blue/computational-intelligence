@@ -1,0 +1,6 @@
+population_size: 20
+generations: 100
+tournament_size: 5
+mutation_rate: 0.01
+mutation_scale: 0.125
+patience: 25

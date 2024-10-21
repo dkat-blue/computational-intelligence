@@ -36,6 +36,26 @@ def create_results_directory():
     logger.info(f"Results directory created: {results_dir}")
     return results_dir
 
+def extract_data_from_generator(generator):
+    """
+    Extract all data from a TimeseriesGenerator or similar generator.
+
+    Args:
+        generator: Data generator.
+
+    Returns:
+        tuple: (X, y) data arrays.
+    """
+    X = []
+    y = []
+    for i in range(len(generator)):
+        x_batch, y_batch = generator[i]
+        X.append(x_batch)
+        y.append(y_batch)
+    X = np.concatenate(X)
+    y = np.concatenate(y)
+    return X, y
+
 def save_model_summary(model, file_path):
     """
     Save a summary of the model architecture to a text file.
