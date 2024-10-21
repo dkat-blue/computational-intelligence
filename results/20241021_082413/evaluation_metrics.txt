@@ -1,3 +1,0 @@
-test_mse: 0.4774
-test_rmse: 0.1787
-test_r2: 0.4068

@@ -4,6 +4,7 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, InputLayer, Flatten
 import logging
 
+from src.optimizers import Optimizer, GeneticAlgorithmOptimizer  # Import the optimizer classes
 from src.utils import log_experiment_params
 
 # Set up logging
@@ -70,13 +71,14 @@ class ModelWrapper:
         self.optimizer = optimizer
         logger.info("Optimizer set to: %s", type(optimizer).__name__)
 
-    def train(self, train_generator, val_generator, results_dir=None, **kwargs):
+    def train(self, train_generator, val_generator, scaler_y=None, results_dir=None, **kwargs):
         """
         Train the model using the optimizer's optimize method.
 
         Args:
             train_generator: Training data generator.
             val_generator: Validation data generator.
+            scaler_y: The scaler used for the target variable.
             results_dir (str): Directory to save results.
             **kwargs: Additional arguments for the optimizer's optimize method.
         """
@@ -84,7 +86,12 @@ class ModelWrapper:
             raise ValueError("Optimizer not set. Use set_optimizer() to assign an optimizer.")
 
         # Optimize the model
-        self.optimizer.optimize(self.model, train_generator, val_generator, results_dir=results_dir, **kwargs)
+        if isinstance(self.optimizer, GeneticAlgorithmOptimizer):
+            # Pass scaler_y to optimize method
+            self.optimizer.optimize(self.model, train_generator, val_generator, scaler_y, results_dir=results_dir, **kwargs)
+        else:
+            # For optimizers that don't require scaler_y or results_dir
+            self.optimizer.optimize(self.model, train_generator, val_generator, **kwargs)
 
         # Save model and optimizer hyperparameters
         if results_dir:
@@ -96,9 +103,18 @@ class ModelWrapper:
 
             # Save optimizer hyperparameters
             optimizer_hyperparams = self.optimizer.get_hyperparameters()
-            optimizer_hyperparams_path = os.path.join(results_dir, 'optimizer_hyperparameters.txt')
+            optimizer_name = type(self.optimizer).__name__
+            optimizer_hyperparams_path = os.path.join(results_dir, f'{optimizer_name}_hyperparameters.txt')
             log_experiment_params(optimizer_hyperparams, optimizer_hyperparams_path)
             logger.info(f"Optimizer hyperparameters saved to: {optimizer_hyperparams_path}")
+
+            # Save training history if available
+            if hasattr(self.optimizer, 'history') and self.optimizer.history is not None:
+                history_path = os.path.join(results_dir, f'{optimizer_name}_history.txt')
+                with open(history_path, 'w') as f:
+                    for key in self.optimizer.history.history.keys():
+                        f.write(f"{key}: {self.optimizer.history.history[key]}\n")
+                logger.info(f"Training history saved to: {history_path}")
 
     def evaluate(self, test_generator):
         """

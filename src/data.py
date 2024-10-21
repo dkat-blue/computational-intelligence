@@ -24,17 +24,37 @@ def load_and_preprocess_data(file_path):
     logger.info(f"Loading data from {file_path}")
     train_data = pd.read_csv(file_path)
     logger.info(f"Train data shape: {train_data.shape}")
-    
+
     # Drop unnecessary columns
     train_data.drop(columns=['Unnamed: 0', 'Time', 'Location'], inplace=True, errors='ignore')
-    
+
     # Define input and output columns
-    input_columns = ['Temp_2m', 'RelHum_2m', 'DP_2m', 'WS_10m', 'WS_100m', 'WD_10m', 'WD_100m', 'WG_10m']
+    input_columns = ['Temp_2m', 'RelHum_2m', 'DP_2m', 'WS_10m', 'WS_100m',
+                     'WD_10m', 'WD_100m', 'WG_10m']
     output_column = 'Power'
-    
+
     logger.info(f"Input columns: {input_columns}")
     logger.info(f"Output column: {output_column}")
-    
+
+    # Check for NaNs and infinite values
+    if train_data[input_columns + [output_column]].isnull().values.any():
+        logger.error("Data contains NaNs. Please check the dataset.")
+        raise ValueError("Data contains NaNs.")
+    if np.isinf(train_data[input_columns + [output_column]].values).any():
+        logger.error("Data contains infinite values. Please check the dataset.")
+        raise ValueError("Data contains infinite values.")
+
+    # Check for zero variance in features and target
+    zero_variance_features = train_data[input_columns].std() == 0
+    if zero_variance_features.any():
+        features_with_zero_variance = train_data[input_columns].columns[zero_variance_features].tolist()
+        logger.error(f"Features with zero variance: {features_with_zero_variance}")
+        raise ValueError(f"Features with zero variance: {features_with_zero_variance}")
+
+    if train_data[output_column].std() == 0:
+        logger.error("Target variable has zero variance.")
+        raise ValueError("Target variable has zero variance.")
+
     return train_data, input_columns, output_column
 
 def split_and_scale_data(data, input_columns, output_column, test_size=0.15, val_size=0.15):
@@ -73,10 +93,32 @@ def split_and_scale_data(data, input_columns, output_column, test_size=0.15, val
     val_X = scaler_X.transform(val_data[input_columns])
     test_X = scaler_X.transform(test_data[input_columns])
 
+    # Verify scaled input features
+    if np.isnan(train_X).any() or np.isinf(train_X).any():
+        logger.error("Scaled training features contain NaNs or infinite values.")
+        raise ValueError("Scaled training features contain NaNs or infinite values.")
+    if np.isnan(val_X).any() or np.isinf(val_X).any():
+        logger.error("Scaled validation features contain NaNs or infinite values.")
+        raise ValueError("Scaled validation features contain NaNs or infinite values.")
+    if np.isnan(test_X).any() or np.isinf(test_X).any():
+        logger.error("Scaled test features contain NaNs or infinite values.")
+        raise ValueError("Scaled test features contain NaNs or infinite values.")
+
     # Scale output variable
     train_y = scaler_y.fit_transform(train_data[[output_column]])
     val_y = scaler_y.transform(val_data[[output_column]])
     test_y = scaler_y.transform(test_data[[output_column]])
+
+    # Verify scaled output variable
+    if np.isnan(train_y).any() or np.isinf(train_y).any():
+        logger.error("Scaled training target contains NaNs or infinite values.")
+        raise ValueError("Scaled training target contains NaNs or infinite values.")
+    if np.isnan(val_y).any() or np.isinf(val_y).any():
+        logger.error("Scaled validation target contains NaNs or infinite values.")
+        raise ValueError("Scaled validation target contains NaNs or infinite values.")
+    if np.isnan(test_y).any() or np.isinf(test_y).any():
+        logger.error("Scaled test target contains NaNs or infinite values.")
+        raise ValueError("Scaled test target contains NaNs or infinite values.")
 
     # Create TimeseriesGenerator instances
     window_size = 12

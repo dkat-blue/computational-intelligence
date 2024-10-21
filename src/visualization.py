@@ -57,10 +57,10 @@ def plot_fitness_history(fitness_history, save_path=None):
     plt.figure()
     plt.plot(fitness_history)
     plt.xlabel('Generation')
-    plt.ylabel('Best Fitness')
-    plt.title('Best Fitness Over Generations')
+    plt.ylabel('Best Fitness (MSE)')
+    plt.title('Best Fitness (MSE) Over Generations')
     plt.grid(True)
-    
+
     if save_path:
         plt.savefig(save_path)
         logger.info(f"Fitness history plot saved to {save_path}")
