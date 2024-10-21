@@ -41,6 +41,7 @@ def plot_training_history(history, save_path=None):
     if save_path:
         plt.savefig(save_path)
         logger.info(f"Training history plot saved to {save_path}")
+        plt.close()
     else:
         plt.show()
 
@@ -63,6 +64,7 @@ def plot_fitness_history(fitness_history, save_path=None):
     if save_path:
         plt.savefig(save_path)
         logger.info(f"Fitness history plot saved to {save_path}")
+        plt.close()
     else:
         plt.show()
 
@@ -100,6 +102,7 @@ def plot_predictions(actual, predicted, title, save_path=None):
     if save_path:
         plt.savefig(save_path)
         logger.info(f"Predictions plot saved to {save_path}")
+        plt.close()
     else:
         plt.show()
 
@@ -171,6 +174,34 @@ def compare_models(actual1, predicted1, actual2, predicted2, model1_name, model2
     if save_path:
         plt.savefig(save_path)
         logger.info(f"Model comparison plot saved to {save_path}")
+    else:
+        plt.show()
+
+def plot_time_series_predictions(actual, predicted, title, save_path=None):
+    """
+    Plot the actual and predicted values over time.
+
+    Args:
+        actual (np.array): Array of actual values.
+        predicted (np.array): Array of predicted values.
+        title (str): Title for the plot.
+        save_path (str, optional): Path to save the plot. If None, the plot is displayed.
+    """
+    set_plot_style()
+    plt.figure(figsize=(15, 7))
+    plt.plot(actual, label='Actual Power')
+    plt.plot(predicted, label='Predicted Power', alpha=0.7)
+    plt.xlabel('Time Steps')
+    plt.ylabel('Power')
+    plt.title(title)
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path)
+        logger.info(f"Time series predictions plot saved to {save_path}")
+        plt.close()
     else:
         plt.show()
 

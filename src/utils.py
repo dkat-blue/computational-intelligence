@@ -98,6 +98,30 @@ def load_results(results_dir):
     
     return results
 
+def save_model_weights(model, file_path):
+    """
+    Save the model's weights to the specified file path.
+
+    Args:
+        model (tf.keras.Model): The model whose weights are to be saved.
+        file_path (str): Path to save the model weights.
+    """
+    model.save_weights(file_path)
+    logger.info(f"Model weights saved to {file_path}")
+
+def save_evaluation_metrics(metrics, file_path):
+    """
+    Save evaluation metrics to a text file.
+
+    Args:
+        metrics (dict): Dictionary containing evaluation metrics.
+        file_path (str): Path to save the metrics file.
+    """
+    with open(file_path, 'w') as f:
+        for key, value in metrics.items():
+            f.write(f"{key}: {value}\n")
+    logger.info(f"Evaluation metrics saved to {file_path}")
+
 if __name__ == "__main__":
     # Example usage
     set_seeds()

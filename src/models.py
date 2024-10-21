@@ -1,6 +1,8 @@
+# src/models.py
+
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, Dropout, InputLayer
+from tensorflow.keras.layers import Dense, Dropout, InputLayer, Flatten
 from tensorflow.keras.optimizers import SGD
 import logging
 
@@ -13,7 +15,7 @@ def create_model(input_shape, layer_sizes=[256, 128, 64], dropout_rate=0.2, l2_r
     Create a neural network model with the specified architecture.
 
     Args:
-        input_shape (tuple): Shape of the input data.
+        input_shape (tuple): Shape of the input data (window_size, num_features).
         layer_sizes (list): List of integers representing the number of units in each hidden layer.
         dropout_rate (float): Dropout rate to apply after each hidden layer.
         l2_reg (float): L2 regularization factor.
@@ -21,7 +23,9 @@ def create_model(input_shape, layer_sizes=[256, 128, 64], dropout_rate=0.2, l2_r
     Returns:
         tf.keras.Model: The created model.
     """
-    model = Sequential([InputLayer(input_shape=input_shape)])
+    model = Sequential()
+    model.add(InputLayer(input_shape=input_shape))
+    model.add(Flatten())
 
     for units in layer_sizes:
         model.add(Dense(units, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(l2_reg)))
@@ -55,7 +59,7 @@ def create_and_compile_sgd_model(input_shape, layer_sizes=[256, 128, 64], dropou
     Create and compile a model for SGD training.
 
     Args:
-        input_shape (tuple): Shape of the input data.
+        input_shape (tuple): Shape of the input data (window_size, num_features).
         layer_sizes (list): List of integers representing the number of units in each hidden layer.
         dropout_rate (float): Dropout rate to apply after each hidden layer.
         l2_reg (float): L2 regularization factor.
@@ -73,13 +77,14 @@ def create_ga_model(input_shape, layer_sizes=[256, 128, 64]):
     Create a model for use with the Genetic Algorithm.
 
     Args:
-        input_shape (tuple): Shape of the input data.
-        layer_sizes (list): List of integers representing the number of units in each hidden layer.
+        input_shape (tuple): Shape of the input data (window_size, num_features).
 
     Returns:
         tf.keras.Model: The created model (uncompiled).
     """
-    model = Sequential([InputLayer(input_shape=input_shape)])
+    model = Sequential()
+    model.add(InputLayer(input_shape=input_shape))
+    model.add(Flatten())
 
     for units in layer_sizes:
         model.add(Dense(units, activation='relu'))
@@ -103,7 +108,7 @@ def get_total_params(model):
 
 if __name__ == "__main__":
     # Example usage and testing
-    input_shape = (8,)  # Assuming 8 input features
+    input_shape = (12, 8)  # Assuming window_size=12 and 8 input features
     layer_sizes = [128, 64, 32]
 
     # Create and compile SGD model

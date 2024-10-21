@@ -1,18 +1,10 @@
 import os
 import random
 import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_squared_error
-
 import tensorflow as tf
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, Dropout, InputLayer
-from tensorflow.keras.optimizers import SGD
-from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
+import matplotlib.pyplot as plt
+from sklearn.metrics import mean_squared_error, r2_score
+from src.utils import save_model_weights, save_evaluation_metrics
 
 # Flattened weight arrays helper functions
 def get_weights_flat(model):
@@ -34,6 +26,17 @@ def set_weights_from_flat(model, flat_weights):
             idx += size
     model.set_weights(weights)
 
+def extract_data_from_generator(generator):
+    X = []
+    y = []
+    for i in range(len(generator)):
+        x_batch, y_batch = generator[i]
+        X.append(x_batch)
+        y.append(y_batch)
+    X = np.concatenate(X)
+    y = np.concatenate(y)
+    return X, y
+
 # Define the fitness function
 def compute_fitness(E_Wi):
     # FI(W_i) = 1 / (E_Wi + epsilon)
@@ -51,11 +54,32 @@ def tournament_selection(population, fitnesses, tournament_size):
         selected.append(winner)
     return selected
 
-def genetic_algorithm(model, train_data, val_data, test_data, scaler_y, population_size=50, generations=100, 
-                      tournament_size=3, mutation_rate=0.005, mutation_scale=0.1, results_dir=None):
-    train_X, train_y = train_data
-    val_X, val_y = val_data
-    test_X, test_y = test_data
+def genetic_algorithm(model, train_generator, val_generator, test_generator, scaler_y, population_size=50, generations=100, 
+                      tournament_size=3, mutation_rate=0.005, mutation_scale=0.1, patience=10, results_dir=None):
+    """
+    Genetic Algorithm optimization with early stopping.
+
+    Args:
+        model: The neural network model to optimize.
+        train_generator: Training data generator.
+        val_generator: Validation data generator.
+        test_generator: Test data generator.
+        scaler_y: Scaler for the target variable.
+        population_size (int): Size of the population.
+        generations (int): Maximum number of generations.
+        tournament_size (int): Size of the tournament for selection.
+        mutation_rate (float): Probability of mutation for each gene.
+        mutation_scale (float): Scale of mutation noise.
+        patience (int): Number of generations to wait for improvement before stopping.
+        results_dir (str): Directory to save results.
+
+    Returns:
+        Tuple containing the best model, fitness history, and evaluation results.
+    """
+    # Extract data from generators for evaluation
+    train_X, train_y = extract_data_from_generator(train_generator)
+    val_X, val_y = extract_data_from_generator(val_generator)
+    test_X, test_y = extract_data_from_generator(test_generator)
 
     # Initialize population
     initial_weights_flat = get_weights_flat(model)
@@ -65,6 +89,7 @@ def genetic_algorithm(model, train_data, val_data, test_data, scaler_y, populati
     best_fitness_overall = -np.inf
     best_individual_overall = None
     fitness_history = []
+    generations_without_improvement = 0  # Counter for early stopping
 
     for generation in range(generations):
         print(f"Generation {generation}")
@@ -72,9 +97,9 @@ def genetic_algorithm(model, train_data, val_data, test_data, scaler_y, populati
         fitnesses = []
         for individual in population:
             set_weights_from_flat(model, individual)
-            # Compute loss on training data
-            y_pred = model.predict(train_X, verbose=0)
-            E_Wi = mean_squared_error(train_y, y_pred)
+            # Compute loss on validation data
+            y_pred = model.predict(val_X, verbose=0)
+            E_Wi = mean_squared_error(val_y, y_pred)
             FI_Wi = compute_fitness(E_Wi)
             fitnesses.append(FI_Wi)
         fitnesses = np.array(fitnesses)
@@ -86,10 +111,16 @@ def genetic_algorithm(model, train_data, val_data, test_data, scaler_y, populati
         print(f"Best fitness: {best_fitness:.6f}")
         fitness_history.append(best_fitness)
 
-        # Check for early stopping
+        # Early stopping check
         if best_fitness > best_fitness_overall:
             best_fitness_overall = best_fitness
             best_individual_overall = best_individual.copy()
+            generations_without_improvement = 0  # Reset counter
+        else:
+            generations_without_improvement += 1
+            if generations_without_improvement >= patience:
+                print(f"No improvement for {patience} generations. Early stopping at generation {generation}.")
+                break
 
         selected_population = tournament_selection(population, fitnesses, tournament_size)
 
@@ -124,26 +155,35 @@ def genetic_algorithm(model, train_data, val_data, test_data, scaler_y, populati
     test_loss = mean_squared_error(test_y, y_pred_test)
     print(f"Test Loss (MSE): {test_loss:.6f}")
 
-    # Compute RMSE
+    # Compute RMSE and R2 Score
     test_predictions = scaler_y.inverse_transform(y_pred_test)
     test_actual = scaler_y.inverse_transform(test_y)
     rmse = np.sqrt(mean_squared_error(test_actual, test_predictions))
+    r2 = r2_score(test_actual, test_predictions)
     print(f"Test RMSE: {rmse:.4f}")
+    print(f"Test R2 Score: {r2:.4f}")
 
     if results_dir:
-        # Plot fitness over generations
-        plt.figure(figsize=(10, 6))
-        plt.plot(fitness_history)
-        plt.xlabel('Generation')
-        plt.ylabel('Best Fitness')
-        plt.title('Best Fitness Over Generations')
-        plt.grid(True)
-        plt.savefig(os.path.join(results_dir, 'ga_fitness_history.png'))
-        plt.close()
+        # Save model weights
+        model_weights_path = os.path.join(results_dir, 'best_model.weights.h5')
+        save_model_weights(model, model_weights_path)
+
+        # Save evaluation metrics
+        metrics = {
+            "test_mse": f"{test_loss:.4f}",
+            "test_rmse": f"{rmse:.4f}",
+            "test_r2": f"{r2:.4f}"
+        }
+        metrics_path = os.path.join(results_dir, 'evaluation_metrics.txt')
+        save_evaluation_metrics(metrics, metrics_path)
+
+        # Removed automatic plotting as per your request
+        # You can perform plotting separately in your notebook or script
 
     return model, fitness_history, {
         "mse": test_loss,
         "rmse": rmse,
+        "r2": r2,
         "predictions": test_predictions,
         "actual": test_actual
     }
@@ -155,10 +195,11 @@ if __name__ == "__main__":
     import os
 
     # Load data
-    (train_X, train_y), (val_X, val_y), (test_X, test_y), scaler_X, scaler_y = load_data()
+    train_gen, val_gen, test_gen, scaler_X, scaler_y = load_data()
 
     # Create model
-    model = create_ga_model(input_shape=(train_X.shape[1],))
+    input_shape = (12, 8)  # window_size=12, num_features=8
+    model = create_ga_model(input_shape=input_shape)
 
     # Set up results directory
     results_dir = "example_results_ga"
@@ -167,75 +208,13 @@ if __name__ == "__main__":
     # Run genetic algorithm
     best_model, fitness_history, eval_results = genetic_algorithm(
         model,
-        (train_X, train_y),
-        (val_X, val_y),
-        (test_X, test_y),
+        train_gen,
+        val_gen,
+        test_gen,
         scaler_y,
         population_size=50,
-        generations=50,  # Reduced for quicker example
+        generations=50,  # Adjust as needed
         results_dir=results_dir
     )
-
-    import numpy as np
-from sklearn.metrics import mean_squared_error, r2_score
-import logging
-import os
-from src.visualization import plot_predictions
-from src.utils import log_experiment_params
-
-# Set up logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
-
-def evaluate_model_ga(model, test_data, scaler_y, results_dir=None):
-    """
-    Evaluate the GA-optimized model on test data.
-
-    Args:
-        model (tf.keras.Model): The GA-optimized model to evaluate.
-        test_data (tuple): Test data as (X, y).
-        scaler_y (sklearn.preprocessing.StandardScaler): Scaler used for the target variable.
-        results_dir (str): Directory to save results. If None, results won't be saved.
-
-    Returns:
-        dict: Dictionary containing evaluation metrics.
-    """
-    logger.info("Evaluating GA-optimized model on test data")
-    
-    test_X, test_y = test_data
-    test_predictions_scaled = model.predict(test_X)
-    
-    # Inverse transform the predictions and actual values
-    test_predictions = scaler_y.inverse_transform(test_predictions_scaled)
-    test_actual = scaler_y.inverse_transform(test_y)
-    
-    # Calculate metrics
-    mse = mean_squared_error(test_actual, test_predictions)
-    rmse = np.sqrt(mse)
-    r2 = r2_score(test_actual, test_predictions)
-    
-    logger.info(f"Test MSE: {mse:.4f}")
-    logger.info(f"Test RMSE: {rmse:.4f}")
-    logger.info(f"Test R2 Score: {r2:.4f}")
-    
-    if results_dir:
-        # Plot predictions
-        plot_predictions(test_actual, test_predictions, "GA Model Predictions", 
-                         save_path=os.path.join(results_dir, "ga_predictions.png"))
-        
-        # Log evaluation metrics
-        log_experiment_params({
-            "test_mse": mse,
-            "test_rmse": rmse,
-            "test_r2": r2
-        }, os.path.join(results_dir, "ga_evaluation_metrics.txt"))
-    
-    return {
-        "mse": mse,
-        "rmse": rmse,
-        "r2": r2,
-        "predictions": test_predictions,
-        "actual": test_actual
-    }
 
     print("Genetic Algorithm optimization complete. Check the 'example_results_ga' directory for outputs.")
