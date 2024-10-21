@@ -1,7 +1,7 @@
 import os
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, InputLayer, Flatten
+from tensorflow.keras.layers import Dense, InputLayer, Flatten, Dropout
 import logging
 
 from src.optimizers import Optimizer, GeneticAlgorithmOptimizer  # Import the optimizer classes
@@ -40,14 +40,17 @@ class ModelWrapper:
         Returns:
             tf.keras.Model: The constructed Sequential model.
         """
+        print("Building a new model...")
         model = Sequential()
         model.add(InputLayer(input_shape=self.input_shape))
         model.add(Flatten())
 
         for units in self.layer_sizes:
             model.add(Dense(units=units, activation='relu'))
+            model.add(Dropout(0.2))
 
-        model.add(Dense(1))  # Output layer
+        # Output layer with sigmoid activation to ensure non-negative outputs
+        model.add(Dense(1, activation='sigmoid'))
         return model
 
     def compile(self, optimizer, loss='mse'):
@@ -81,6 +84,9 @@ class ModelWrapper:
             scaler_y: The scaler used for the target variable.
             results_dir (str): Directory to save results.
             **kwargs: Additional arguments for the optimizer's optimize method.
+
+        Returns:
+            History object if optimizer has 'history', else None.
         """
         if self.optimizer is None:
             raise ValueError("Optimizer not set. Use set_optimizer() to assign an optimizer.")
@@ -115,6 +121,12 @@ class ModelWrapper:
                     for key in self.optimizer.history.history.keys():
                         f.write(f"{key}: {self.optimizer.history.history[key]}\n")
                 logger.info(f"Training history saved to: {history_path}")
+
+        # Return the optimizer's history if it exists
+        if hasattr(self.optimizer, 'history'):
+            return self.optimizer.history
+        else:
+            return None
 
     def evaluate(self, test_generator):
         """
