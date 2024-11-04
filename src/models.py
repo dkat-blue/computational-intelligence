@@ -1,7 +1,7 @@
 import os
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, InputLayer, Flatten, Dropout
+from tensorflow.keras.layers import Dense, InputLayer, LSTM, GRU, Dropout
 import logging
 
 from src.optimizers import Optimizer, GeneticAlgorithmOptimizer  # Import the optimizer classes
@@ -16,7 +16,7 @@ class ModelWrapper:
     A class to encapsulate the neural network model.
     """
 
-    def __init__(self, input_shape, layer_sizes):
+    def __init__(self, input_shape, layer_sizes):  # Changed from init to __init__
         """
         Initialize the model.
 
@@ -40,16 +40,19 @@ class ModelWrapper:
         Returns:
             tf.keras.Model: The constructed Sequential model.
         """
-        print("Building a new model...")
+        print("Building a new model with sequence support...")
         model = Sequential()
         model.add(InputLayer(input_shape=self.input_shape))
-        model.add(Flatten())
+        
+        # Add LSTM and GRU layers for sequence processing
+        model.add(LSTM(64, return_sequences=True))
+        model.add(GRU(32))
 
         for units in self.layer_sizes:
             model.add(Dense(units=units, activation='relu'))
             model.add(Dropout(0.2))
 
-        # Output layer with sigmoid activation to ensure non-negative outputs
+        # Output layer with sigmoid activation for [0, 1] range output
         model.add(Dense(1, activation='sigmoid'))
         return model
 
@@ -72,7 +75,7 @@ class ModelWrapper:
             optimizer (Optimizer): An instance of an optimizer class.
         """
         self.optimizer = optimizer
-        logger.info("Optimizer set to: %s", type(optimizer).__name__)
+        logger.info("Optimizer set to: %s", type(optimizer).__name__)  # Changed from .name to .__name__
 
     def train(self, train_generator, val_generator, scaler_y=None, results_dir=None, **kwargs):
         """
@@ -109,7 +112,7 @@ class ModelWrapper:
 
             # Save optimizer hyperparameters
             optimizer_hyperparams = self.optimizer.get_hyperparameters()
-            optimizer_name = type(self.optimizer).__name__
+            optimizer_name = type(self.optimizer).name
             optimizer_hyperparams_path = os.path.join(results_dir, f'{optimizer_name}_hyperparameters.txt')
             log_experiment_params(optimizer_hyperparams, optimizer_hyperparams_path)
             logger.info(f"Optimizer hyperparameters saved to: {optimizer_hyperparams_path}")

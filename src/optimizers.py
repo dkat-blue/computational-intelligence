@@ -21,6 +21,47 @@ class Optimizer:
 
     def get_hyperparameters(self):
         raise NotImplementedError("Subclasses should implement this method.")
+    
+class BackpropagationOptimizer(Optimizer):
+    """
+    Simple wrapper for standard backpropagation using the model's compiled optimizer.
+    """
+    def __init__(self, epochs=50, patience=10):
+        self.epochs = epochs
+        self.patience = patience
+        self.history = None
+        self.hyperparameters = {
+            "epochs": self.epochs,
+            "patience": self.patience
+        }
+
+    def get_hyperparameters(self):
+        return self.hyperparameters
+
+    def optimize(self, model, train_generator, val_generator, **kwargs):
+        """
+        Train the model using standard backpropagation with the compiled optimizer.
+        
+        Args:
+            model: The compiled Keras model
+            train_generator: Training data generator
+            val_generator: Validation data generator
+            **kwargs: Additional arguments to pass to model.fit()
+        """
+        early_stopping = tf.keras.callbacks.EarlyStopping(
+            monitor='val_loss',
+            patience=self.patience,
+            restore_best_weights=True
+        )
+
+        self.history = model.fit(
+            train_generator,
+            validation_data=val_generator,
+            epochs=self.epochs,
+            callbacks=[early_stopping],
+            **kwargs
+        )
+        return self.history
 
 class SGDOptimizer(Optimizer):
     """

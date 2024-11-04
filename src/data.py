@@ -1,158 +1,136 @@
-# src/data.py
-
-import os
-import pandas as pd
 import numpy as np
-from sklearn.preprocessing import StandardScaler
-import logging
+import pandas as pd
+from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.preprocessing.sequence import TimeseriesGenerator
 
-# Set up logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+# Ініціалізація скейлерів для вхідних і вихідних даних
+scaler_x = MinMaxScaler(feature_range=(0, 1))
+scaler_y = MinMaxScaler(feature_range=(0, 1))
 
-def load_and_preprocess_data(file_path):
+def load_and_preprocess_data(file_path, target_column):
     """
-    Load and preprocess the wind power data.
+    Завантажити та підготувати дані з файлу CSV.
 
     Args:
-        file_path (str): Path to the CSV file containing the data.
+        file_path (str): Шлях до файлу CSV з даними.
+        target_column (str): Назва стовпця з цільовими значеннями.
 
     Returns:
-        tuple: Preprocessed data, input column names, and output column name.
+        pd.DataFrame: Підготовлені дані.
     """
-    logger.info(f"Loading data from {file_path}")
-    train_data = pd.read_csv(file_path)
-    logger.info(f"Train data shape: {train_data.shape}")
-
-    # Drop unnecessary columns
-    train_data.drop(columns=['Unnamed: 0', 'Time', 'Location'], inplace=True, errors='ignore')
-
-    # Define input and output columns
-    input_columns = ['Temp_2m', 'RelHum_2m', 'DP_2m', 'WS_10m', 'WS_100m',
-                     'WD_10m', 'WD_100m', 'WG_10m']
-    output_column = 'Power'
-
-    logger.info(f"Input columns: {input_columns}")
-    logger.info(f"Output column: {output_column}")
-
-    # Check for NaNs and infinite values
-    if train_data[input_columns + [output_column]].isnull().values.any():
-        logger.error("Data contains NaNs. Please check the dataset.")
-        raise ValueError("Data contains NaNs.")
-    if np.isinf(train_data[input_columns + [output_column]].values).any():
-        logger.error("Data contains infinite values. Please check the dataset.")
-        raise ValueError("Data contains infinite values.")
-
-    # Check for zero variance in features and target
-    zero_variance_features = train_data[input_columns].std() == 0
-    if zero_variance_features.any():
-        features_with_zero_variance = train_data[input_columns].columns[zero_variance_features].tolist()
-        logger.error(f"Features with zero variance: {features_with_zero_variance}")
-        raise ValueError(f"Features with zero variance: {features_with_zero_variance}")
-
-    if train_data[output_column].std() == 0:
-        logger.error("Target variable has zero variance.")
-        raise ValueError("Target variable has zero variance.")
-
-    return train_data, input_columns, output_column
-
-def split_and_scale_data(data, input_columns, output_column, test_size=0.15, val_size=0.15):
-    """
-    Split the data sequentially into training, validation, and test sets, and scale the features.
-
-    Args:
-        data (pd.DataFrame): The preprocessed data.
-        input_columns (list): List of input feature column names.
-        output_column (str): Name of the target variable column.
-
-    Returns:
-        tuple: Generators for train, validation, and test sets, along with scalers.
-    """
-    # Calculate the number of samples for each set
-    num_samples = len(data)
-    num_test = int(num_samples * test_size)
-    num_val = int(num_samples * val_size)
-    num_train = num_samples - num_test - num_val
-
-    # Split the data sequentially
-    train_data = data.iloc[:num_train]
-    val_data = data.iloc[num_train:num_train + num_val]
-    test_data = data.iloc[num_train + num_val:]
-
-    logger.info(f"Training set shape: {train_data.shape}")
-    logger.info(f"Validation set shape: {val_data.shape}")
-    logger.info(f"Test set shape: {test_data.shape}")
-
-    # Initialize scalers
-    scaler_X = StandardScaler()
-    scaler_y = StandardScaler()
-
-    # Scale input features
-    train_X = scaler_X.fit_transform(train_data[input_columns])
-    val_X = scaler_X.transform(val_data[input_columns])
-    test_X = scaler_X.transform(test_data[input_columns])
-
-    # Verify scaled input features
-    if np.isnan(train_X).any() or np.isinf(train_X).any():
-        logger.error("Scaled training features contain NaNs or infinite values.")
-        raise ValueError("Scaled training features contain NaNs or infinite values.")
-    if np.isnan(val_X).any() or np.isinf(val_X).any():
-        logger.error("Scaled validation features contain NaNs or infinite values.")
-        raise ValueError("Scaled validation features contain NaNs or infinite values.")
-    if np.isnan(test_X).any() or np.isinf(test_X).any():
-        logger.error("Scaled test features contain NaNs or infinite values.")
-        raise ValueError("Scaled test features contain NaNs or infinite values.")
-
-    # Scale output variable
-    train_y = scaler_y.fit_transform(train_data[[output_column]])
-    val_y = scaler_y.transform(val_data[[output_column]])
-    test_y = scaler_y.transform(test_data[[output_column]])
-
-    # Verify scaled output variable
-    if np.isnan(train_y).any() or np.isinf(train_y).any():
-        logger.error("Scaled training target contains NaNs or infinite values.")
-        raise ValueError("Scaled training target contains NaNs or infinite values.")
-    if np.isnan(val_y).any() or np.isinf(val_y).any():
-        logger.error("Scaled validation target contains NaNs or infinite values.")
-        raise ValueError("Scaled validation target contains NaNs or infinite values.")
-    if np.isnan(test_y).any() or np.isinf(test_y).any():
-        logger.error("Scaled test target contains NaNs or infinite values.")
-        raise ValueError("Scaled test target contains NaNs or infinite values.")
-
-    # Create TimeseriesGenerator instances
-    window_size = 12
-    batch_size = 32  # You can adjust this as needed
-
-    train_generator = TimeseriesGenerator(train_X, train_y, length=window_size, batch_size=batch_size)
-    val_generator = TimeseriesGenerator(val_X, val_y, length=window_size, batch_size=batch_size)
-    test_generator = TimeseriesGenerator(test_X, test_y, length=window_size, batch_size=batch_size)
-
-    logger.info("Data scaling and sequence generation completed")
-
-    return train_generator, val_generator, test_generator, scaler_X, scaler_y
-
-def load_data(data_dir='../data/raw', file_name='Train.csv'):
-    """
-    Load the data from the specified directory and file name.
-
-    Args:
-        data_dir (str): Directory containing the data file.
-        file_name (str): Name of the data file.
-
-    Returns:
-        tuple: Generators for train, validation, and test sets, along with scalers.
-    """
-    file_path = os.path.join(data_dir, file_name)
-    train_data, input_columns, output_column = load_and_preprocess_data(file_path)
-    return split_and_scale_data(train_data, input_columns, output_column)
-
-if __name__ == "__main__":
-    # Example usage
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    data_dir = os.path.join(current_dir, '..', 'data', 'raw')
-    train_gen, val_gen, test_gen, scaler_X, scaler_y = load_data(data_dir)
+    # Load data
+    print(f"\nLoading data from {file_path}")
+    data = pd.read_csv(file_path)
+    print("\nInitial data types:")
+    print(data.dtypes)
     
-    logger.info(f"Number of training sequences: {len(train_gen)}")
-    logger.info(f"Number of validation sequences: {len(val_gen)}")
-    logger.info(f"Number of test sequences: {len(test_gen)}")
+    # Convert datetime column
+    datetime_col = data.columns[0]
+    print(f"\nConverting datetime column: {datetime_col}")
+    data[datetime_col] = pd.to_datetime(data[datetime_col])
+    data[datetime_col] = data[datetime_col].astype(np.int64) // 10**9
+    
+    print("\nData types after datetime conversion:")
+    print(data.dtypes)
+    
+    # Make a copy to avoid SettingWithCopyWarning
+    data = data.copy()
+    
+    # Drop NA values
+    initial_rows = len(data)
+    data.dropna(inplace=True)
+    print(f"\nRows dropped due to NA: {initial_rows - len(data)}")
+    
+    # Convert all remaining object columns to numeric
+    for column in data.select_dtypes(include=['object']):
+        if column != target_column:
+            try:
+                data[column] = pd.to_numeric(data[column])
+                print(f"Successfully converted '{column}' to numeric")
+            except ValueError:
+                print(f"Warning: Could not convert column '{column}' to numeric. Dropping it.")
+                data = data.drop(columns=[column])
+    
+    print("\nFinal data types before splitting:")
+    print(data.dtypes)
+    
+    # Split into features and target
+    X = data.drop(columns=[target_column])
+    y = data[target_column]
+    
+    print(f"\nShape of X before scaling: {X.shape}")
+    print(f"Shape of y before scaling: {y.shape}")
+    
+    # Convert to numpy arrays
+    X = X.values
+    y = y.values.reshape(-1, 1)
+    
+    # Scale the data
+    X_scaled = scaler_x.fit_transform(X)
+    y_scaled = scaler_y.fit_transform(y)
+
+    print(f"\nShape of X after scaling: {X_scaled.shape}")
+    print(f"Shape of y after scaling: {y_scaled.shape}")
+
+    return X_scaled, y_scaled
+
+def inverse_scale_data(data, is_target=False):
+    """
+    Інверсія масштабування для вхідних або цільових даних.
+
+    Args:
+        data (np.array): Масив даних для інверсії масштабування.
+        is_target (bool): Чи є дані цільовими значеннями (True для y, False для X).
+
+    Returns:
+        np.array: Дані у вихідному масштабі.
+    """
+    scaler = scaler_y if is_target else scaler_x
+    return scaler.inverse_transform(data)
+
+def split_and_generate_sequences(X, y, look_back=10, batch_size=32, val_split=0.2, test_split=0.1):
+    """
+    Поділ даних на навчальну, валідаційну та тестову вибірки та створення послідовностей.
+
+    Args:
+        X (np.array): Масштабовані вхідні дані.
+        y (np.array): Масштабовані цільові дані.
+        look_back (int): Кількість попередніх кроків, що використовуються для передбачення.
+        batch_size (int): Розмір пакету для генератора.
+        val_split (float): Частка валідаційної вибірки.
+        test_split (float): Частка тестової вибірки.
+
+    Returns:
+        tuple: Генератори для навчальної, валідаційної та тестової вибірок.
+    """
+    # Розділення даних на навчальну, валідаційну та тестову вибірки
+    train_size = int(len(X) * (1 - val_split - test_split))
+    val_size = int(len(X) * val_split)
+    
+    X_train, X_val, X_test = X[:train_size], X[train_size:train_size + val_size], X[train_size + val_size:]
+    y_train, y_val, y_test = y[:train_size], y[train_size:train_size + val_size], y[train_size + val_size:]
+
+    # Генератори послідовностей
+    train_generator = TimeseriesGenerator(X_train, y_train, length=look_back, batch_size=batch_size)
+    val_generator = TimeseriesGenerator(X_val, y_val, length=look_back, batch_size=batch_size)
+    test_generator = TimeseriesGenerator(X_test, y_test, length=look_back, batch_size=batch_size)
+
+    return train_generator, val_generator, test_generator
+
+def load_data(file_path, target_column, look_back=10, batch_size=32, val_split=0.2, test_split=0.1):
+    """
+    Завантажити та підготувати дані, створити генератори для послідовностей.
+
+    Args:
+        file_path (str): Шлях до файлу CSV з даними.
+        target_column (str): Назва стовпця з цільовими значеннями.
+        look_back (int): Кількість попередніх кроків для передбачення.
+        batch_size (int): Розмір пакету для генератора.
+        val_split (float): Частка валідаційної вибірки.
+        test_split (float): Частка тестової вибірки.
+
+    Returns:
+        tuple: Генератори для навчальної, валідаційної та тестової вибірок.
+    """
+    X_scaled, y_scaled = load_and_preprocess_data(file_path, target_column)
+    return split_and_generate_sequences(X_scaled, y_scaled, look_back, batch_size, val_split, test_split)
