@@ -9,14 +9,14 @@ from src.utils import log_experiment_params
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(name)
 
 class ModelWrapper:
     """
     A class to encapsulate the neural network model.
     """
 
-    def __init__(self, input_shape, layer_sizes):  # Changed from init to __init__
+    def init(self, input_shape, layer_sizes):
         """
         Initialize the model.
 
@@ -75,7 +75,7 @@ class ModelWrapper:
             optimizer (Optimizer): An instance of an optimizer class.
         """
         self.optimizer = optimizer
-        logger.info("Optimizer set to: %s", type(optimizer).__name__)  # Changed from .name to .__name__
+        logger.info("Optimizer set to: %s", type(optimizer).name)
 
     def train(self, train_generator, val_generator, scaler_y=None, results_dir=None, **kwargs):
         """

@@ -18,59 +18,16 @@ def load_and_preprocess_data(file_path, target_column):
     Returns:
         pd.DataFrame: Підготовлені дані.
     """
-    # Load data
-    print(f"\nLoading data from {file_path}")
     data = pd.read_csv(file_path)
-    print("\nInitial data types:")
-    print(data.dtypes)
-    
-    # Convert datetime column
-    datetime_col = data.columns[0]
-    print(f"\nConverting datetime column: {datetime_col}")
-    data[datetime_col] = pd.to_datetime(data[datetime_col])
-    data[datetime_col] = data[datetime_col].astype(np.int64) // 10**9
-    
-    print("\nData types after datetime conversion:")
-    print(data.dtypes)
-    
-    # Make a copy to avoid SettingWithCopyWarning
-    data = data.copy()
-    
-    # Drop NA values
-    initial_rows = len(data)
     data.dropna(inplace=True)
-    print(f"\nRows dropped due to NA: {initial_rows - len(data)}")
+
+    # Поділ на вхідні (X) і цільові (y) змінні
+    X = data.drop(columns=[target_column]).values
+    y = data[target_column].values.reshape(-1, 1)
     
-    # Convert all remaining object columns to numeric
-    for column in data.select_dtypes(include=['object']):
-        if column != target_column:
-            try:
-                data[column] = pd.to_numeric(data[column])
-                print(f"Successfully converted '{column}' to numeric")
-            except ValueError:
-                print(f"Warning: Could not convert column '{column}' to numeric. Dropping it.")
-                data = data.drop(columns=[column])
-    
-    print("\nFinal data types before splitting:")
-    print(data.dtypes)
-    
-    # Split into features and target
-    X = data.drop(columns=[target_column])
-    y = data[target_column]
-    
-    print(f"\nShape of X before scaling: {X.shape}")
-    print(f"Shape of y before scaling: {y.shape}")
-    
-    # Convert to numpy arrays
-    X = X.values
-    y = y.values.reshape(-1, 1)
-    
-    # Scale the data
+    # Масштабування вхідних і вихідних даних
     X_scaled = scaler_x.fit_transform(X)
     y_scaled = scaler_y.fit_transform(y)
-
-    print(f"\nShape of X after scaling: {X_scaled.shape}")
-    print(f"Shape of y after scaling: {y_scaled.shape}")
 
     return X_scaled, y_scaled
 
