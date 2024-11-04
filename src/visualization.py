@@ -205,6 +205,64 @@ def plot_time_series_predictions(actual, predicted, title, save_path=None):
     else:
         plt.show()
 
+def plot_power_predictions(actual, predicted, timestamps, save_path=None):
+    """
+    Plot power predictions with timestamps and additional metrics.
+    
+    Args:
+        actual (np.array): Array of actual power values
+        predicted (np.array): Array of predicted power values
+        timestamps (np.array): Array of corresponding timestamps
+        save_path (str, optional): Path to save the plots
+    """
+    set_plot_style()
+    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(15, 18))
+    
+    # Time series plot
+    ax1.plot(timestamps, actual, label='Actual', alpha=0.7)
+    ax1.plot(timestamps, predicted, label='Predicted', alpha=0.7)
+    ax1.set_xlabel('Time')
+    ax1.set_ylabel('Power')
+    ax1.set_title('Power Output: Actual vs Predicted')
+    ax1.legend()
+    ax1.grid(True)
+    
+    # Scatter plot
+    ax2.scatter(actual, predicted, alpha=0.5)
+    min_val = min(actual.min(), predicted.min())
+    max_val = max(actual.max(), predicted.max())
+    ax2.plot([min_val, max_val], [min_val, max_val], 'r--', lw=2)
+    ax2.set_xlabel('Actual Power')
+    ax2.set_ylabel('Predicted Power')
+    ax2.set_title('Actual vs Predicted Power')
+    ax2.grid(True)
+    
+    # Error distribution
+    errors = predicted - actual
+    sns.histplot(errors, kde=True, ax=ax3)
+    ax3.set_xlabel('Prediction Error')
+    ax3.set_ylabel('Frequency')
+    ax3.set_title('Distribution of Prediction Errors')
+    
+    # Add metrics
+    mse = mean_squared_error(actual, predicted)
+    rmse = np.sqrt(mse)
+    r2 = r2_score(actual, predicted)
+    mae = np.mean(np.abs(errors))
+    
+    metrics_text = f'MSE: {mse:.4f}\nRMSE: {rmse:.4f}\nMAE: {mae:.4f}\nR²: {r2:.4f}'
+    plt.figtext(0.02, 0.02, metrics_text, fontsize=10, 
+                bbox=dict(facecolor='white', alpha=0.8))
+    
+    plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path)
+        logger.info(f"Power predictions plot saved to {save_path}")
+        plt.close()
+    else:
+        plt.show()
+
 if __name__ == "__main__":
     # Example usage
     import numpy as np

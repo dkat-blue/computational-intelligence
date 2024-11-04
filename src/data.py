@@ -16,6 +16,7 @@ class DataProcessor:
         self.file_path = file_path
         self.target_column = target_column
         self.scaler = MinMaxScaler(feature_range=(0, 1))
+        self.target_scaler = MinMaxScaler(feature_range=(0, 1))  # Separate scaler for target
         self.data = self._load_data()
         
     def _load_data(self):
@@ -36,16 +37,18 @@ class DataProcessor:
         # Create a copy of the data
         scaled_df = data.copy()
         
-        # Drop non-numeric columns before scaling
-        columns_to_scale = scaled_df.select_dtypes(include=[np.number]).columns
+        # Scale target column separately
+        target_values = scaled_df[[self.target_column]].values
+        scaled_df[self.target_column] = self.target_scaler.fit_transform(target_values)
         
-        # Scale only numeric columns
-        scaled_values = self.scaler.fit_transform(scaled_df[columns_to_scale])
-        
-        # Replace scaled values in the dataframe
-        for i, col in enumerate(columns_to_scale):
-            scaled_df[col] = scaled_values[:, i]
-            
+        # Scale other numeric columns
+        numeric_cols = scaled_df.select_dtypes(include=[np.number]).columns
+        numeric_cols = numeric_cols[numeric_cols != self.target_column]  # Exclude target
+        if len(numeric_cols) > 0:
+            scaled_values = self.scaler.fit_transform(scaled_df[numeric_cols])
+            for i, col in enumerate(numeric_cols):
+                scaled_df[col] = scaled_values[:, i]
+                
         return scaled_df
 
     def _inverse_scale(self, data):
