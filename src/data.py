@@ -1,93 +1,112 @@
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
-from tensorflow.keras.preprocessing.sequence import TimeseriesGenerator
+import tensorflow as tf
 
-# Ініціалізація скейлерів для вхідних і вихідних даних
-scaler_x = MinMaxScaler(feature_range=(0, 1))
-scaler_y = MinMaxScaler(feature_range=(0, 1))
+# Configuration dictionary to centralize parameters
+config = {
+    'look_back': 15,
+    'batch_size': 32,
+    'val_split': 0.2,
+    'test_split': 0.1
+}
 
-def load_and_preprocess_data(file_path, target_column):
-    """
-    Завантажити та підготувати дані з файлу CSV.
+class DataProcessor:
+    def __init__(self, file_path, target_column):
+        self.file_path = file_path
+        self.target_column = target_column
+        self.scaler = MinMaxScaler(feature_range=(0, 1))
+        self.data = self._load_data()
+        
+    def _load_data(self):
+        # Load data from CSV file
+        try:
+            data = pd.read_csv(self.file_path)
+        except FileNotFoundError:
+            raise ValueError(f"File not found: {self.file_path}")
+        if self.target_column not in data.columns:
+            raise ValueError(f"Target column '{self.target_column}' not found in dataset.")
+        
+        # Convert Time column to datetime with day first format
+        data['Time'] = pd.to_datetime(data['Time'], format='%d-%m-%Y %H:%M')
+        
+        return data
 
-    Args:
-        file_path (str): Шлях до файлу CSV з даними.
-        target_column (str): Назва стовпця з цільовими значеннями.
+    def _scale_data(self, data):
+        # Create a copy of the data
+        scaled_df = data.copy()
+        
+        # Drop non-numeric columns before scaling
+        columns_to_scale = scaled_df.select_dtypes(include=[np.number]).columns
+        
+        # Scale only numeric columns
+        scaled_values = self.scaler.fit_transform(scaled_df[columns_to_scale])
+        
+        # Replace scaled values in the dataframe
+        for i, col in enumerate(columns_to_scale):
+            scaled_df[col] = scaled_values[:, i]
+            
+        return scaled_df
 
-    Returns:
-        pd.DataFrame: Підготовлені дані.
-    """
-    data = pd.read_csv(file_path)
-    data.dropna(inplace=True)
+    def _inverse_scale(self, data):
+        # Inverse scaling for post-processing predictions or actual values
+        return self.scaler.inverse_transform(data)
 
-    # Поділ на вхідні (X) і цільові (y) змінні
-    X = data.drop(columns=[target_column]).values
-    y = data[target_column].values.reshape(-1, 1)
-    
-    # Масштабування вхідних і вихідних даних
-    X_scaled = scaler_x.fit_transform(X)
-    y_scaled = scaler_y.fit_transform(y)
+    def _create_sequences(self, data):
+        # Select only numeric columns for sequence creation
+        numeric_data = data.select_dtypes(include=[np.number]).values
+        
+        X, y = [], []
+        for i in range(len(numeric_data) - config['look_back']):
+            X.append(numeric_data[i:i + config['look_back']])
+            y.append(numeric_data[i + config['look_back'], -1])  # Assuming target is the last numeric column
+        
+        return np.array(X), np.array(y)
 
-    return X_scaled, y_scaled
+    def prepare_data(self):
+        # Scale data and split it into training, validation, and test sets
+        scaled_data = self._scale_data(self.data)
+        
+        # Sort data by time to ensure temporal ordering
+        scaled_data = scaled_data.sort_values('Time')
+        
+        # Create sequences maintaining temporal order
+        X, y = self._create_sequences(scaled_data)
+        
+        # Calculate split indices - NO SHUFFLING to maintain temporal order
+        train_size = int(len(X) * (1 - config['val_split'] - config['test_split']))
+        val_size = int(len(X) * config['val_split'])
+        
+        # Split data temporally
+        X_train, y_train = X[:train_size], y[:train_size]
+        X_val, y_val = X[train_size:train_size + val_size], y[train_size:train_size + val_size]
+        X_test, y_test = X[train_size + val_size:], y[train_size + val_size:]
+        
+        # Print shapes and ranges for debugging
+        print("\nData Ranges (scaled):")
+        print(f"Training   - X: {X_train.shape}, y: min={y_train.min():.4f}, max={y_train.max():.4f}")
+        print(f"Validation - X: {X_val.shape}, y: min={y_val.min():.4f}, max={y_val.max():.4f}")
+        print(f"Test      - X: {X_test.shape}, y: min={y_test.min():.4f}, max={y_test.max():.4f}")
+        
+        # Verify no data leakage between sets
+        train_dates = scaled_data.iloc[:train_size]['Time']
+        val_dates = scaled_data.iloc[train_size:train_size + val_size]['Time']
+        print("\nTemporal Split Check:")
+        print(f"Training period: {train_dates.min()} to {train_dates.max()}")
+        print(f"Validation period: {val_dates.min()} to {val_dates.max()}")
+        
+        # Package data as tf.data.Dataset
+        train_data = tf.data.Dataset.from_tensor_slices((X_train, y_train)).batch(config['batch_size'])
+        val_data = tf.data.Dataset.from_tensor_slices((X_val, y_val)).batch(config['batch_size'])
+        test_data = tf.data.Dataset.from_tensor_slices((X_test, y_test)).batch(config['batch_size'])
+        
+        return train_data, val_data, test_data
 
-def inverse_scale_data(data, is_target=False):
-    """
-    Інверсія масштабування для вхідних або цільових даних.
-
-    Args:
-        data (np.array): Масив даних для інверсії масштабування.
-        is_target (bool): Чи є дані цільовими значеннями (True для y, False для X).
-
-    Returns:
-        np.array: Дані у вихідному масштабі.
-    """
-    scaler = scaler_y if is_target else scaler_x
-    return scaler.inverse_transform(data)
-
-def split_and_generate_sequences(X, y, look_back=10, batch_size=32, val_split=0.2, test_split=0.1):
-    """
-    Поділ даних на навчальну, валідаційну та тестову вибірки та створення послідовностей.
-
-    Args:
-        X (np.array): Масштабовані вхідні дані.
-        y (np.array): Масштабовані цільові дані.
-        look_back (int): Кількість попередніх кроків, що використовуються для передбачення.
-        batch_size (int): Розмір пакету для генератора.
-        val_split (float): Частка валідаційної вибірки.
-        test_split (float): Частка тестової вибірки.
-
-    Returns:
-        tuple: Генератори для навчальної, валідаційної та тестової вибірок.
-    """
-    # Розділення даних на навчальну, валідаційну та тестову вибірки
-    train_size = int(len(X) * (1 - val_split - test_split))
-    val_size = int(len(X) * val_split)
-    
-    X_train, X_val, X_test = X[:train_size], X[train_size:train_size + val_size], X[train_size + val_size:]
-    y_train, y_val, y_test = y[:train_size], y[train_size:train_size + val_size], y[train_size + val_size:]
-
-    # Генератори послідовностей
-    train_generator = TimeseriesGenerator(X_train, y_train, length=look_back, batch_size=batch_size)
-    val_generator = TimeseriesGenerator(X_val, y_val, length=look_back, batch_size=batch_size)
-    test_generator = TimeseriesGenerator(X_test, y_test, length=look_back, batch_size=batch_size)
-
-    return train_generator, val_generator, test_generator
-
-def load_data(file_path, target_column, look_back=10, batch_size=32, val_split=0.2, test_split=0.1):
-    """
-    Завантажити та підготувати дані, створити генератори для послідовностей.
-
-    Args:
-        file_path (str): Шлях до файлу CSV з даними.
-        target_column (str): Назва стовпця з цільовими значеннями.
-        look_back (int): Кількість попередніх кроків для передбачення.
-        batch_size (int): Розмір пакету для генератора.
-        val_split (float): Частка валідаційної вибірки.
-        test_split (float): Частка тестової вибірки.
-
-    Returns:
-        tuple: Генератори для навчальної, валідаційної та тестової вибірок.
-    """
-    X_scaled, y_scaled = load_and_preprocess_data(file_path, target_column)
-    return split_and_generate_sequences(X_scaled, y_scaled, look_back, batch_size, val_split, test_split)
+    def check_scaling(self, data, scaled_data):
+        # Validate scaling by checking min and max values in both directions
+        numeric_cols = data.select_dtypes(include=[np.number]).columns
+        assert np.min(scaled_data[numeric_cols].values) >= 0 and np.max(scaled_data[numeric_cols].values) <= 1, "Scaled data is out of range [0, 1]"
+        
+        # Check inverse scaling only for numeric columns
+        inversed_data = self._inverse_scale(scaled_data[numeric_cols].values)
+        np.testing.assert_almost_equal(data[numeric_cols].values, inversed_data, decimal=5, err_msg="Inverse scaling is inaccurate")
