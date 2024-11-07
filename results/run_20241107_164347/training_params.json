@@ -1,0 +1,16 @@
+{
+    "optimizer": "SGD",
+    "learning_rate": 0.01,
+    "momentum": 0.9,
+    "loss_function": "mse",
+    "batch_size": 32,
+    "epochs": 83,
+    "window_size": 12,
+    "n_timesteps": 12,
+    "n_features": 9,
+    "early_stopping_patience": 10,
+    "train_size": 98100,
+    "validation_size": 21012,
+    "test_size": 21012,
+    "random_seed": 42
+}
