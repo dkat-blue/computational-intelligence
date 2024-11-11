@@ -1,0 +1,14 @@
+{
+    "population_size": 50,
+    "generations": 100,
+    "mutation_rate": 0.01,
+    "elite_frac": 0.1,
+    "patience": 10,
+    "window_size": 12,
+    "n_timesteps": 12,
+    "n_features": 9,
+    "train_size": 98100,
+    "validation_size": 21012,
+    "test_size": 21012,
+    "random_seed": 42
+}
