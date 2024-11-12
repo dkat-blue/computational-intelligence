@@ -1,0 +1,21 @@
+{
+    "optimizer_sgd": "SGD",
+    "learning_rate": 0.01,
+    "momentum": 0.9,
+    "loss_function": "mse",
+    "batch_size": 32,
+    "epochs_sgd": 100,
+    "window_size": 12,
+    "n_timesteps": 12,
+    "n_features": 9,
+    "early_stopping_patience": 10,
+    "train_size": 98100,
+    "validation_size": 21012,
+    "test_size": 21012,
+    "random_seed": 42,
+    "population_size_ga": 50,
+    "generations_ga": 100,
+    "mutation_rate_ga": 0.01,
+    "elite_frac_ga": 0.1,
+    "patience_ga": 10
+}

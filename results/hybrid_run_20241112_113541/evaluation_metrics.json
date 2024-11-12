@@ -1,0 +1,12 @@
+{
+    "validation_r2_score": 0.9880549604347186,
+    "validation_mse": 0.0005929211992023672,
+    "validation_mae": 0.018095742118554407,
+    "test_r2_score": 0.9911046904311045,
+    "test_mse": 0.0004788575407976427,
+    "test_mae": 0.016443329743587247,
+    "best_generation_ga": 100,
+    "best_mse_ga": 0.015398761368522945,
+    "epochs_sgd": 100,
+    "best_val_loss_sgd": 0.0005929211620241404
+}
