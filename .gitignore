@@ -32,3 +32,5 @@ logs/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+results/
